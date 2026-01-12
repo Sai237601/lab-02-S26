@@ -3,6 +3,7 @@ title: "Lab 2: Intro to iCOW"
 subtitle: "CEVE 421/521"
 date: 2026-01-23
 engine: julia
+status: draft
 
 format:
   html:
@@ -10,7 +11,9 @@ format:
     toc-depth: 2
     code-block-bg: "#f8f8f8"
     code-block-border-left: "#e1e4e5"
-    theme: simplex
+    theme:
+      - simplex
+      - _assets/sass/custom.scss
     number-sections: true
     fig-format: svg
   typst:
@@ -33,32 +36,288 @@ code-block-font-size: "0.85em"
 
 ## Overview
 
-::: {.instructor}
-**Instructor Notes:** Placeholder for learning objectives and teaching notes.
-:::
+In this lab, you will learn to quantify flood risk by connecting hazard models to damage functions.
+This is a core skill in climate risk analysis: translating uncertain physical events into uncertain economic outcomes.
 
-Lab objectives and context - to be written.
+**Learning Objectives:**
+
+1. Understand the GEV distribution for modeling extreme events
+2. Use Monte Carlo sampling for uncertainty quantification
+3. Apply a depth-damage function to compute flood losses
+4. Use for loops to extend analysis to multiple houses
+5. Calculate community-level risk metrics
+
 
 ## Setup
 
+Julia uses packages to make code reusable and modular.
+This block will install all required packages for you -- the first time you run the code, it may be slow while everything is installed and compiled.
+From there, it should be quick.
+
 ```{julia}
+#| output: false
 if !isfile("Manifest.toml")
     using Pkg
     Pkg.instantiate()
 end
 ```
 
-## Exercises
-
-::: {.instructor}
-**Solution Notes:** Placeholder for solution guidance.
-:::
-
-### Exercise 1
-
-Exercise description - to be written.
+Here, we tell the notebook which packages we will be using.
 
 ```{julia}
-# SOLUTION
-# Solution code will go here
+#| output: false
+using CairoMakie
+using Distributions
+using Statistics
 ```
+
+
+## Exercise 1: The GEV Distribution for Flood Hazard
+
+Imagine a coastal town called ImaginaryLand.
+We want to model the annual maximum storm surge -- the highest water level observed each year.
+
+The Generalized Extreme Value (GEV) distribution is the theoretically appropriate model for annual maxima.
+It has three parameters:
+
+- **Location (μ):** The "center" of the distribution, roughly the typical annual maximum
+- **Scale (σ):** How spread out the distribution is (must be positive)
+- **Shape (ξ):** Controls the tail behavior; positive = heavier tail, negative = bounded tail
+
+For ImaginaryLand, let's assume storm surge follows a GEV distribution with:
+
+- μ = 5 ft (typical annual max surge)
+- σ = 2 ft (moderate variability)
+- ξ = 0.1 (slightly heavy tail -- extreme events are possible)
+
+```{julia}
+#| output: false
+# Define the storm surge distribution for ImaginaryLand
+μ = 5.0  # location (ft)
+σ = 2.0  # scale (ft)
+ξ = 0.1  # shape (dimensionless)
+
+surge_dist = GeneralizedExtremeValue(μ, σ, ξ)
+```
+
+Let's visualize this distribution:
+
+```{julia}
+#| label: fig-gev-pdf
+#| fig-cap: "GEV distribution for annual maximum storm surge in ImaginaryLand."
+let
+    x_range = range(0, 15; length=200)
+    fig = Figure()
+    ax = Axis(
+        fig[1, 1];
+        xlabel="Storm Surge (ft)",
+        ylabel="Density",
+        title="Annual Maximum Storm Surge Distribution"
+    )
+    lines!(ax, x_range, pdf.(surge_dist, x_range); linewidth=2)
+    fig
+end
+```
+
+::: {.callout-tip appearance="simple" icon=false title="Your Response"}
+*What does the shape of this distribution tell us about flood risk in ImaginaryLand?
+Why might the right tail be important for risk analysis?
+Replace this text with your observations.*
+:::
+
+
+## Exercise 2: Monte Carlo Sampling
+
+Now we'll use Monte Carlo sampling to generate many possible flood scenarios.
+Each sample represents one possible year's worth of flooding.
+
+**Your task:** Draw 10,000 samples from the GEV distribution and plot a histogram.
+
+```{julia}
+#| label: fig-mc-samples
+#| fig-cap: "Monte Carlo samples from the storm surge distribution."
+# Your code here
+```
+
+
+## Exercise 3: Define a Depth-Damage Function
+
+A depth-damage function translates flood depth into damage as a fraction of the building value.
+This is a simplified HAZUS-style function for residential structures.
+
+```{julia}
+#| output: false
+"""
+    depth_damage(depth::Real)
+
+HAZUS-style depth-damage function for a residential structure.
+Returns damage as a fraction of structure value (0 to 1).
+
+# Arguments
+
+- `depth`: Flood depth above first floor (ft). Negative means no flooding.
+"""
+function depth_damage(depth::Real)
+    if depth <= 0
+        return 0.0
+    elseif depth <= 1
+        return 0.10 * depth
+    elseif depth <= 4
+        return 0.10 + 0.15 * (depth - 1)
+    elseif depth <= 8
+        return 0.55 + 0.10 * (depth - 4)
+    else
+        return min(0.95, 0.95)  # Cap at 95%
+    end
+end
+```
+
+**Your task:** Plot the depth-damage function for depths from -2 to 15 feet.
+
+```{julia}
+#| label: fig-ddf
+#| fig-cap: "HAZUS-style depth-damage function for residential structures."
+# Your code here
+```
+
+
+## Exercise 4: Compute Damage Distribution for One House
+
+Now we'll combine the hazard (storm surge) with the vulnerability (depth-damage function) to compute the distribution of damages for a single house.
+
+**Important:** The flood depth at a house is the surge minus the house's first floor elevation.
+
+```{julia}
+#| output: false
+# House parameters
+house_value = 250_000  # dollars
+house_elevation = 5.0  # feet above sea level (first floor elevation)
+```
+
+**Your task:** For each hazard sample, compute the damage to this house.
+
+```{julia}
+#| label: fig-damage-dist
+#| fig-cap: "Distribution of annual damages for a single house."
+# Your code here
+```
+
+
+**Your task:** Answer these questions using your damage samples:
+
+1. What is the mean annual damage (expected annual damage, EAD)?
+2. What is the probability of any damage occurring?
+3. What is the probability of damage exceeding $50,000?
+
+```{julia}
+# Your code here
+```
+
+
+## Exercise 5: Extend to 100 Houses with Varying Exposures
+
+Now let's consider a community of 100 houses at different elevations.
+We'll model this as a "city on a wedge" where houses are distributed at various heights above sea level.
+
+```{julia}
+#| output: false
+# 100 houses at different elevations
+n_houses = 100
+
+# Heights above sea level follow a Uniform distribution
+height_min = 3.0  # feet
+height_max = 12.0  # feet
+house_elevations = rand(Uniform(height_min, height_max), n_houses)
+
+# All houses have the same value for simplicity
+house_values = fill(250_000, n_houses)
+```
+
+**Your task:** Use a for loop to compute the expected annual damage for each house.
+Store the results in a vector called `expected_damages`.
+
+```{julia}
+#| output: false
+# Your code here
+```
+
+
+Let's visualize the relationship between elevation and expected damage:
+
+```{julia}
+#| label: fig-ead-vs-elevation
+#| fig-cap: "Expected annual damage decreases nonlinearly with house elevation."
+let
+    fig = Figure()
+    ax = Axis(
+        fig[1, 1];
+        xlabel="House Elevation (ft)",
+        ylabel="Expected Annual Damage (\$)",
+        title="Expected Annual Damage vs. House Elevation"
+    )
+    scatter!(ax, house_elevations, expected_damages; markersize=8)
+    fig
+end
+```
+
+::: {.callout-tip appearance="simple" icon=false title="Your Response"}
+*Why is the relationship between elevation and expected damage nonlinear?
+Replace this text with your explanation.*
+:::
+
+
+## Exercise 6: Total Community Risk
+
+**Your task:** Calculate the total expected annual damage across all 100 houses.
+
+```{julia}
+# Your code here
+```
+
+Now let's visualize the distribution of total community damages.
+We need to calculate total damage for each Monte Carlo sample:
+
+```{julia}
+#| label: fig-community-damage
+#| fig-cap: "Distribution of total annual damages across the community."
+# Your code here
+```
+
+
+## Reflection Questions
+
+Answer these questions in a few sentences each:
+
+::: {.callout-tip appearance="simple" icon=false title="Question 1"}
+*How does uncertainty in the hazard (GEV) propagate to uncertainty in damages?
+Replace this text with your answer.*
+:::
+
+::: {.callout-tip appearance="simple" icon=false title="Question 2"}
+*Why is expected damage not equal to damage at the expected flood stage? (Hint: think about Jensen's inequality)
+Replace this text with your answer.*
+:::
+
+::: {.callout-tip appearance="simple" icon=false title="Question 3"}
+*What assumptions did we make that might not hold in reality?
+Replace this text with your answer.*
+:::
+
+
+## Summary
+
+In this lab, you learned to:
+
+1. Work with the GEV distribution for extreme event modeling
+2. Use Monte Carlo sampling for uncertainty quantification
+3. Apply a depth-damage function to translate hazard into losses
+4. Use for loops to analyze many houses
+5. Calculate community-level risk metrics
+
+These are the building blocks for the iCOW model and climate risk analysis more broadly.
+
+## Submission
+
+1. Push your completed notebook to GitHub
+2. If the formatter creates a pull request, approve it and re-render
+3. Submit the link to your repository on Canvas
