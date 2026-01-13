@@ -131,12 +131,25 @@ Replace this text with your observations.*
 Now we'll use Monte Carlo sampling to generate many possible flood scenarios.
 Each sample represents one possible year's worth of flooding.
 
-**Your task:** Draw 10,000 samples from the GEV distribution and plot a histogram.
+The following code draws 10,000 samples from the GEV distribution and plots a histogram.
 
 ```{julia}
 #| label: fig-mc-samples
 #| fig-cap: "Monte Carlo samples from the storm surge distribution."
-# Your code here
+n_samples = 10_000
+hazard_samples = rand(surge_dist, n_samples)
+
+let
+    fig = Figure()
+    ax = Axis(
+        fig[1, 1];
+        xlabel="Storm Surge (ft)",
+        ylabel="Count",
+        title="Monte Carlo Samples from GEV"
+    )
+    hist!(ax, hazard_samples; bins=50)
+    fig
+end
 ```
 
 
@@ -172,12 +185,24 @@ function depth_damage(depth::Real)
 end
 ```
 
-**Your task:** Plot the depth-damage function for depths from -2 to 15 feet.
+The following code plots the depth-damage function for depths from -2 to 15 feet.
 
 ```{julia}
 #| label: fig-ddf
 #| fig-cap: "HAZUS-style depth-damage function for residential structures."
-# Your code here
+let
+    depths = range(-2, 15; length=100)
+    damages = depth_damage.(depths)
+    fig = Figure()
+    ax = Axis(
+        fig[1, 1];
+        xlabel="Flood Depth (ft)",
+        ylabel="Damage Ratio",
+        title="Depth-Damage Function"
+    )
+    lines!(ax, depths, damages; linewidth=2)
+    fig
+end
 ```
 
 
@@ -194,23 +219,49 @@ house_value = 250_000  # dollars
 house_elevation = 5.0  # feet above sea level (first floor elevation)
 ```
 
-**Your task:** For each hazard sample, compute the damage to this house.
+The following code computes the damage to this house for each hazard sample.
 
 ```{julia}
 #| label: fig-damage-dist
 #| fig-cap: "Distribution of annual damages for a single house."
-# Your code here
+# Calculate flood depth at house for each sample
+flood_depths = hazard_samples .- house_elevation
+
+# Apply depth-damage function to get damage ratios
+damage_ratios = depth_damage.(flood_depths)
+
+# Convert to dollar damages
+damages = damage_ratios .* house_value
+
+# Visualize the damage distribution
+let
+    fig = Figure()
+    ax = Axis(
+        fig[1, 1];
+        xlabel="Damage (\$)",
+        ylabel="Count",
+        title="Distribution of Annual Damages"
+    )
+    hist!(ax, damages; bins=50)
+    fig
+end
 ```
 
 
-**Your task:** Answer these questions using your damage samples:
+Run the code below to answer these questions:
 
 1. What is the mean annual damage (expected annual damage, EAD)?
 2. What is the probability of any damage occurring?
 3. What is the probability of damage exceeding $50,000?
 
 ```{julia}
-# Your code here
+mean_damage = mean(damages)
+prob_any_damage = mean(damages .> 0)
+prob_severe = mean(damages .> 50_000)
+
+println("Mean annual damage: \$$(round(mean_damage; digits=2))")
+println("Probability of any damage: $(round(prob_any_damage * 100; digits=1))%")
+println("Probability of damage > \$50k: $(round(prob_severe * 100; digits=1))%")
 ```
 
 
@@ -233,12 +284,27 @@ house_elevations = rand(Uniform(height_min, height_max), n_houses)
 house_values = fill(250_000, n_houses)
 ```
 
-**Your task:** Use a for loop to compute the expected annual damage for each house.
-Store the results in a vector called `expected_damages`.
+The following code uses a for loop to compute the expected annual damage for each house, storing the results in a vector called `expected_damages`.
 
 ```{julia}
 #| output: false
-# Your code here
+# Initialize storage for expected annual damages
+expected_damages = zeros(n_houses)
+
+# Loop over houses
+for i in 1:n_houses
+    # Calculate flood depths for this house
+    depths_i = hazard_samples .- house_elevations[i]
+
+    # Calculate damage ratios
+    damage_ratios_i = depth_damage.(depths_i)
+
+    # Calculate dollar damages
+    damages_i = damage_ratios_i .* house_values[i]
+
+    # Store expected annual damage
+    expected_damages[i] = mean(damages_i)
+end
 ```
 
 
@@ -268,10 +334,11 @@ Replace this text with your explanation.*
 
 ## Exercise 6: Total Community Risk
 
-**Your task:** Calculate the total expected annual damage across all 100 houses.
+The following code calculates the total expected annual damage across all 100 houses.
 
 ```{julia}
-# Your code here
+total_ead = sum(expected_damages)
+println("Total community EAD: \$$(round(total_ead; digits=2))")
 ```
 
 Now let's visualize the distribution of total community damages.
@@ -280,7 +347,29 @@ We need to calculate total damage for each Monte Carlo sample:
 ```{julia}
 #| label: fig-community-damage
 #| fig-cap: "Distribution of total annual damages across the community."
-# Your code here
+# Calculate total damage for each sample
+total_damages = zeros(n_samples)
+for j in 1:n_samples
+    sample_total = 0.0
+    for i in 1:n_houses
+        depth_ij = hazard_samples[j] - house_elevations[i]
+        damage_ij = depth_damage(depth_ij) * house_values[i]
+        sample_total += damage_ij
+    end
+    total_damages[j] = sample_total
+end
+
+let
+    fig = Figure()
+    ax = Axis(
+        fig[1, 1];
+        xlabel="Total Community Damage (\$)",
+        ylabel="Count",
+        title="Distribution of Annual Community Damages"
+    )
+    hist!(ax, total_damages; bins=50)
+    fig
+end
 ```
 
 
