@@ -77,6 +77,14 @@ end
 4. Check if packages have been installed yet
 5. If not, install all packages listed in Project.toml
 
+::: {.callout-note}
+If you get an error that `SimOptDecisions` is not registered, run this command first:
+
+```julia
+Pkg.add(url="https://github.com/dossgollin-lab/SimOptDecisions")
+```
+:::
+
 Now load the packages we'll use:
 
 ```{julia}
